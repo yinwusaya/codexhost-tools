@@ -1,0 +1,24 @@
+{
+	admin 127.0.0.1:2020
+	auto_https disable_redirects
+	servers {
+		protocols h1 h2
+	}
+}
+
+https://manager.example.com {
+	bind 100.64.0.10
+	tls /etc/letsencrypt/live/manager.example.com/fullchain.pem /etc/letsencrypt/live/manager.example.com/privkey.pem
+
+	@invalid_origin {
+		header Origin *
+		not header Origin https://manager.example.com
+	}
+	respond @invalid_origin 403
+
+	# Preserve the manager's existing origin checks after validating the public origin.
+	reverse_proxy 127.0.0.1:4410 {
+		header_up Host manager.example.com
+		header_up Origin https://manager.example.com
+	}
+}

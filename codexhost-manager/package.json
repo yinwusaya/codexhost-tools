@@ -1,0 +1,11 @@
+{
+  "name": "codexhost-manager",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test server.test.mjs auth.test.mjs proxy.test.mjs proxy-performance.test.mjs manager-access.test.mjs",
+    "check": "node --check server.mjs && node --check proxy.mjs && node --check auth.mjs && node --check app.js && node --check manager-access.mjs && node --check plugins/manager-access.mjs && node --check provision-access.mjs"
+  }
+}

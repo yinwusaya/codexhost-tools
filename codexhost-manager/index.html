@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodexHost · 设备管理</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="brand" href="/" aria-label="CodexHost 管理首页"><span class="mark">c<span>h</span></span><span>CODEXHOST <small>/ MANAGER</small></span></a>
+      <div class="header-actions"><span class="local-tag">本地管理台</span><button id="logout" type="button" hidden>退出登录</button></div>
+    </header>
+    <section id="login-panel" class="login-panel" aria-labelledby="login-title">
+      <p class="eyebrow">ONE KEY, ALL HOSTS</p>
+      <h1 id="login-title">登录管理台</h1>
+      <p id="login-description" class="description">输入管理台所在机器 .local/config.json 中的 token，查看所有已绑定设备。</p>
+      <form id="login-form">
+        <label>管理台令牌<input id="manager-token" type="password" minlength="16" maxlength="256" autocomplete="current-password" required></label>
+        <p id="login-error" class="notice" role="alert" hidden></p>
+        <button id="login-submit" class="primary" type="submit">登录</button>
+      </form>
+    </section>
+    <div id="dashboard" hidden>
+    <section class="intro">
+      <p class="eyebrow">YOUR MACHINES, ONE PLACE</p>
+      <h1>每台电脑，<br><em>一个入口。</em></h1>
+      <p class="description">不再翻找地址。选一台设备，继续工作。</p>
+    </section>
+    <section aria-labelledby="devices-title">
+      <div class="toolbar">
+        <div class="section-label"><h2 id="devices-title">设备</h2><span id="summary" role="status" aria-live="polite"></span></div>
+        <div class="actions"><button id="refresh" type="button">刷新状态</button><button id="add" class="primary" type="button">+ 添加设备</button></div>
+      </div>
+      <p id="notice" class="notice" role="alert" hidden></p>
+      <div id="devices" class="grid"></div>
+      <div id="empty" class="empty" hidden>还没有设备。点击“添加设备”保存第一个入口。</div>
+    </section>
+    <section class="overview" aria-labelledby="overview-title">
+      <div class="toolbar"><div class="section-label"><h2 id="overview-title">项目与最近任务</h2><span class="readonly">只读</span></div><button id="load-overviews" type="button">刷新汇总</button></div>
+      <p class="hint">仅显示已读取的目录范围，不代表全部历史。任务状态以 Host 当前返回为准。</p>
+      <div id="overview-results" aria-live="polite"></div>
+    </section>
+    <footer><span><span class="foot-dot"></span>端口连通不代表服务验证通过 · 汇总仅读取目录元数据</span><span>统一登录 · 设备信任由后台配置</span></footer>
+    </div>
+  </main>
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="device-form">
+      <div class="dialog-heading"><h2 id="editor-title">添加设备</h2><button id="cancel" type="button" aria-label="关闭">×</button></div>
+      <label>设备名称<input id="name" maxlength="60" required placeholder="例如开发电脑"></label>
+      <label>用途<input id="role" maxlength="100" placeholder="例如 主开发机"></label>
+      <label>CodexHost 地址<input id="url" type="url" maxlength="500" placeholder="http://100.x.x.x:4400"></label>
+      <p class="hint">支持本机、局域网和 Tailscale 地址；未知地址可留空。不要填写密码或 Token。</p>
+      <p id="form-error" class="notice" role="alert" hidden></p>
+      <div class="form-actions"><button id="delete" type="button" class="danger" hidden>删除设备</button><button type="submit" class="primary">保存设备</button></div>
+    </form>
+  </dialog>
+  <dialog id="connection" aria-labelledby="connection-title">
+    <form id="connection-form" autocomplete="off">
+      <div class="dialog-heading"><h2 id="connection-title">连接设备</h2><button id="connection-cancel" type="button" aria-label="关闭连接窗口">×</button></div>
+      <p id="connection-device" class="hint"></p>
+      <label>Web 访问令牌<input id="access-token" type="password" maxlength="4096" autocomplete="new-password" required></label>
+      <p class="hint">首次从目标 CodexHost 的“连接设备”页面手动获取。验证后在本机加密保存，之后只需登录管理台。不读取现有凭证。</p>
+      <p id="connection-error" class="notice" role="alert" hidden></p>
+      <div class="form-actions"><button type="submit" class="primary">连接并读取</button></div>
+    </form>
+  </dialog>
+  <template id="card-template">
+    <article class="card">
+      <div class="card-top"><span class="device-index"></span><span class="status"><i></i><span></span></span></div>
+      <h3></h3><p class="role"></p><p class="address"></p>
+      <div class="card-overview"><span class="overview-status">尚未读取汇总</span><button class="connect" type="button">读取汇总</button></div>
+      <div class="card-bottom"><button class="edit" type="button">编辑</button><a class="open" target="_blank" rel="noopener noreferrer">打开 CodexHost <span aria-hidden="true">↗</span></a></div>
+    </article>
+  </template>
+</body>
+</html>

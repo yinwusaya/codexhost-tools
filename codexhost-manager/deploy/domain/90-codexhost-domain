@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+if [ "${RENEWED_LINEAGE:-}" = /etc/letsencrypt/live/manager.example.com ]; then
+    systemctl reload codexhost-domain.service
+fi

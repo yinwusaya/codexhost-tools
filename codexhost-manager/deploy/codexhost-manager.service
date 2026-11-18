@@ -1,0 +1,16 @@
+[Unit]
+Description=CodexHost Manager
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/codexhost-tools/codexhost-manager
+ExecStart=/usr/bin/node /opt/codexhost-tools/codexhost-manager/server.mjs 4410 https://manager.example.com
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

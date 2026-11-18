@@ -1,0 +1,115 @@
+:root {
+  --paper: #f5f4ef;
+  --ink: #232d29;
+  --muted: #747b75;
+  --line: #d9ddd4;
+  --green: #216846;
+  --accent: #dce6b6;
+  font-family: "Bahnschrift", "Microsoft YaHei UI", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background-image: radial-gradient(#8d9b7c24 .7px, transparent .7px); background-size: 9px 9px; }
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; border: 1px solid var(--line); background: #ffffff80; padding: 10px 16px; border-radius: 6px; color: var(--ink); }
+button:hover { background: #e9eddf; }
+button:disabled { opacity: .55; cursor: wait; }
+button.primary { background: var(--ink); color: white; border-color: var(--ink); }
+button.primary:hover { background: var(--green); }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 3px solid #60976c; outline-offset: 4px; }
+main { max-width: 1232px; padding: 0 48px; margin: auto; }
+header { display: flex; align-items: center; justify-content: space-between; min-height: 104px; border-bottom: 1px solid var(--line); gap: 16px; }
+.brand { display: flex; align-items: center; gap: 14px; font-size: 14px; letter-spacing: 1.5px; }
+.brand small { color: var(--muted); font-size: 11px; }
+.mark { font: bold 29px Georgia, serif; display: grid; place-content: center; position: relative; background: var(--ink); color: white; width: 42px; height: 42px; border-radius: 8px; letter-spacing: -4px; padding-right: 8px; }
+.mark span { position: absolute; left: 20px; top: 6px; color: var(--accent); }
+.local-tag { font-size: 12px; color: var(--muted); padding: 6px 10px; border: 1px solid var(--line); border-radius: 30px; white-space: nowrap; }
+.header-actions { display: flex; align-items: center; gap: 12px; }
+#logout { font-size: 12px; }
+.login-panel { max-width: 440px; padding: 90px 0 120px; margin: auto; }
+.login-panel h1 { font-size: 38px; }
+#login-submit { width: 100%; margin-top: 12px; }
+.intro { padding: 60px 0 44px; position: relative; }
+.intro::after { content: 'HOSTS /'; position: absolute; right: 12px; top: 92px; font: italic 64px Georgia, serif; color: #dfe4d7; transform: rotate(-7deg); pointer-events: none; }
+.eyebrow { font-size: 10px; letter-spacing: 2.5px; color: var(--green); margin: 0 0 20px; }
+h1 { margin: 0; font-size: clamp(35px, 5vw, 52px); letter-spacing: -2px; font-weight: 600; line-height: 1.4; }
+h1 em { font-style: normal; color: var(--green); }
+.description { font-size: 14px; color: var(--muted); margin-top: 18px; }
+.toolbar, .section-label, .actions { display: flex; align-items: center; gap: 12px; }
+.toolbar { justify-content: space-between; padding-bottom: 22px; }
+h2 { font-size: 17px; margin: 0; font-weight: 600; }
+#summary { font-size: 12px; color: var(--muted); }
+.actions button { font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.card { background: #fdfdf9; border: 1px solid var(--line); padding: 24px; border-radius: 10px; animation: arrive .35s ease-out; }
+.card:hover { border-color: #a5b4a0; }
+.card-top, .card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.device-index { font: 12px "Cascadia Code", Consolas, monospace; color: #929b8f; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.status i { width: 6px; height: 6px; border-radius: 50%; background: #a8ada4; }
+.status[data-kind="reachable"] { color: var(--green); }
+.status[data-kind="reachable"] i { background: #489060; box-shadow: 0 0 0 3px #48906016; }
+.status[data-kind="unreachable"] i, .status[data-kind="error"] i { background: #b67445; }
+.status[data-kind="checking"] i { background: #c4a047; }
+h3 { margin: 26px 0 7px; font: 600 25px "Bahnschrift", "Microsoft YaHei UI", sans-serif; overflow-wrap: anywhere; }
+.role { margin: 0 0 22px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.address { margin: 0 0 22px; font: 12px "Cascadia Code", Consolas, monospace; color: #657464; overflow-wrap: anywhere; min-height: 18px; }
+.card-bottom { border-top: 1px solid #e9ece3; padding-top: 17px; }
+.edit { border: 0; padding: 5px 0; background: transparent; font-size: 12px; color: var(--muted); }
+.edit:hover { color: var(--green); background: transparent; }
+.open { display: inline-flex; align-items: center; gap: 22px; font-size: 12px; font-weight: 600; }
+.open:hover { color: var(--green); }
+.open span { font-size: 18px; }
+.card-overview { display: flex; align-items: center; gap: 10px; margin: 0 0 18px; font-size: 11px; color: var(--muted); }
+.overview-status { margin-right: auto; overflow-wrap: anywhere; }
+.connect, .disconnect { font-size: 11px; padding: 6px 9px; flex-shrink: 0; }
+.overview { margin-top: 42px; }
+.readonly { font-size: 10px; border: 1px solid #bfcdb9; border-radius: 4px; padding: 3px 7px; color: var(--green); }
+.overview-device { background: #fdfdf9; border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; margin-top: 16px; }
+.overview-device h3 { margin: 0; font-size: 20px; }
+.project-list { font-size: 12px; line-height: 1.9; overflow-wrap: anywhere; }
+.task-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 180px) 70px; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.task-row a { overflow-wrap: anywhere; }
+.task-row a:hover { color: var(--green); text-decoration: underline; }
+.task-project { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.task-status { font-size: 11px; text-align: right; }
+.task-status[data-kind="active"] { color: var(--green); }
+.task-status[data-kind="systemError"] { color: #9b4c34; }
+#connection-cancel { padding: 0 7px; font-size: 24px; border: 0; background: transparent; }
+footer { margin: 32px 0; padding: 20px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 14px; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.foot-dot { display: inline-block; background: #82906f; width: 5px; height: 5px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+.empty { border: 1px dashed var(--line); padding: 70px 24px; text-align: center; color: var(--muted); font-size: 14px; }
+dialog { border: 1px solid var(--line); border-radius: 12px; padding: 28px; width: min(460px, calc(100% - 32px)); color: var(--ink); background: var(--paper); box-shadow: 0 24px 100px #17231825; }
+dialog::backdrop { background: #1c2a2555; backdrop-filter: blur(3px); }
+.dialog-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+#cancel { padding: 0 7px; font-size: 24px; border: 0; background: transparent; }
+label { display: block; font-size: 12px; margin: 18px 0; }
+input { display: block; margin-top: 9px; padding: 12px; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); font-size: 14px; }
+.hint { font-size: 11px; color: var(--muted); line-height: 1.8; }
+.form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 25px; }
+.danger { color: #9b4c34; margin-right: auto; }
+.notice { background: #f1e4ce; border-radius: 5px; padding: 12px; color: #7d4c28; font-size: 12px; line-height: 1.6; }
+[hidden] { display: none !important; }
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (max-width: 680px) {
+  main { padding: 0 20px; }
+  header { min-height: 84px; }
+  .brand { font-size: 12px; gap: 10px; letter-spacing: .7px; }
+  .brand small { display: none; }
+  .intro { padding: 40px 0 30px; }
+  .intro::after { display: none; }
+  .toolbar { flex-wrap: wrap; gap: 18px; }
+  .section-label { width: 100%; }
+  .actions { width: 100%; }
+  .actions button { flex: 1; }
+  .grid { grid-template-columns: 1fr; gap: 14px; }
+  .card { padding: 22px; }
+  footer { flex-direction: column; gap: 6px; }
+  .task-row { grid-template-columns: minmax(0, 1fr) 60px; gap: 8px; }
+  .task-project { grid-row: 2; }
+  .task-status { grid-column: 2; grid-row: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .card { animation: none; } }
