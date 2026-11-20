@@ -8,6 +8,7 @@ const states = new Map();
 const overviews = new Map();
 let boundOrigins = new Set();
 let proxyPaths = {};
+let directPaths = {};
 let authenticated = false;
 let managerTrust = false;
 let connecting = null;
@@ -94,7 +95,8 @@ function render() {
     }
     const link = card.querySelector('.open');
     if (device.url) {
-      const path = proxyPaths[new URL(device.url).origin];
+      const origin = new URL(device.url).origin;
+      const path = directPaths[origin] || proxyPaths[origin];
       link.href = path || '#';
       if (!path) link.addEventListener('click', (event) => { event.preventDefault(); showConnection(device); });
     }
@@ -154,7 +156,8 @@ function renderOverview() {
       const row = document.createElement('div');
       row.className = 'task-row';
       const title = document.createElement('a');
-      const link = new URL(proxyPaths[new URL(device.url).origin] || '#', location.origin);
+      const origin = new URL(device.url).origin;
+      const link = new URL(directPaths[origin] || proxyPaths[origin] || '#', location.origin);
       link.searchParams.set('session', task.id);
       title.href = link.href;
       title.target = '_blank';
@@ -327,6 +330,7 @@ $('#connection-form').addEventListener('submit', async (event) => {
     $('#connection').close();
     const status = await (await apiFetch('/api/auth/status')).json();
     proxyPaths = status.proxyPaths || {};
+    directPaths = status.directPaths || {};
     void loadOverview(device);
   } catch (error) {
     $('#connection-error').textContent = error.message || '连接失败，未保存令牌';
@@ -347,6 +351,7 @@ function lock() {
   generation++;
   boundOrigins.clear();
   proxyPaths = {};
+  directPaths = {};
   overviews.clear();
   states.clear();
   $('#dashboard').hidden = true;
@@ -374,6 +379,7 @@ async function boot() {
     managerTrust = status.accessMode === 'manager';
     boundOrigins = new Set(status.boundOrigins);
     proxyPaths = status.proxyPaths || {};
+    directPaths = status.directPaths || {};
     for (const bound of status.boundDevices) {
       if (!devices.some((device) => device.url && new URL(device.url).origin === new URL(bound.url).origin)) {
         devices.push({ id: crypto.randomUUID(), name: bound.name, role: bound.role, url: bound.url });

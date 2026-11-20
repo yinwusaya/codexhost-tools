@@ -11,7 +11,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import createProvider from './plugins/manager-access.mjs';
-import { signRequest } from './manager-access.mjs';
+import { browserLoginPath, signRequest } from './manager-access.mjs';
 import { deviceKey } from './proxy.mjs';
 import { testServer } from './test-support.mjs';
 
@@ -76,6 +76,36 @@ test('provider revokes on public trust removal, invalid configuration and dispos
   assert.equal(f.provider.authenticate(f.request(f.headers())).status, 'authenticated');
   f.provider.dispose();
   assert.equal(f.provider.authenticate(f.request(f.headers())).status, 'denied');
+});
+
+test('browser handoff is origin-bound, single-use, separate from proxy proofs, and revocable', async (t) => {
+  const f = await fixture(t);
+  f.device.origin = 'https://127.0.0.1:8181';
+  f.trust.managers[0].mountPath = `/device/${deviceKey(f.device.origin)}`;
+  await writeFile(f.trustPath, JSON.stringify({ ...f.trust, directOrigin: f.device.origin }));
+  const host = new URL(f.device.origin).host;
+  const issued = signRequest(f.device, 'test-session', 'POST', browserLoginPath, f.origin, 'session / 1');
+  const post = (headers, ticket = issued) => ({ method: 'POST', url: browserLoginPath,
+    headers: { host, origin: f.origin, 'content-type': 'application/x-www-form-urlencoded', ...headers },
+    async *iterator() { yield Buffer.from(new URLSearchParams({ proof: ticket['x-codexhost-manager-proof'],
+      signature: ticket['x-codexhost-manager-signature'] }).toString()); } });
+  assert.equal(await f.provider.browserLogin(post({ origin: 'https://other.test' })), undefined);
+  assert.equal(await f.provider.browserLogin(post({ host: 'localhost' })), undefined);
+  assert.equal(f.provider.authenticate(post(issued), true).status, 'denied');
+  assert.equal(await f.provider.browserLogin(post({}, signRequest(f.device, 'test-session', 'POST', browserLoginPath, f.origin))), undefined);
+  const result = await f.provider.browserLogin(post({}));
+  assert.equal(result.location, '/?session=session+%2F+1');
+  assert.match(result.cookie, /^__Host-codexhost_manager=[^;]+; Path=\/; Secure; HttpOnly; SameSite=Lax;/);
+  assert.equal(await f.provider.browserLogin(post({})), undefined);
+  const request = f.request({ host, cookie: result.cookie.split(';')[0] });
+  const admission = f.provider.authenticate(request, true);
+  assert.equal(admission.status, 'authenticated');
+  assert.equal(f.provider.authenticate(request, false).status, 'not-applicable');
+  let revoked;
+  f.provider.onRevoke((id) => { revoked = id; });
+  assert.match(f.provider.browserLogout(request), /Max-Age=0$/);
+  assert.equal(revoked, admission.credential);
+  assert.equal(f.provider.authenticate(request, true).status, 'not-applicable');
 });
 
 test('single manager login signs metadata, HTTP and WebSocket without binding or credential exposure', async (t) => {

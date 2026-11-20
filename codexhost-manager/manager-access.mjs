@@ -3,12 +3,15 @@ import { readFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { deviceKey } from './proxy.mjs';
 
-export function signRequest(device, session, method, target, publicOrigin) {
+export const browserLoginPath = '/api/auth/provider/login';
+
+export function signRequest(device, session, method, target, publicOrigin, browserSession) {
   const issuedAt = Math.floor(Date.now() / 1000);
   const proof = Buffer.from(JSON.stringify({
     version: 1, keyId: device.keyId, audience: device.id, sessionId: session,
     method, target, publicOrigin, mountPath: `/device/${deviceKey(device.origin)}`,
     issuedAt, expiresAt: issuedAt + 30, nonce: randomBytes(24).toString('base64url'),
+    ...(browserSession === undefined ? {} : { directOrigin: device.origin, browserSession }),
   })).toString('base64url');
   return {
     'x-codexhost-manager-proof': proof,
@@ -46,7 +49,8 @@ export function makeManagerAccess(path, parseTarget) {
           || typeof row.keyId !== 'string' || !/^[A-Za-z0-9_-]{1,96}$/.test(row.keyId)
           || typeof row.privateKeyFile !== 'string') throw new Error();
         const url = parseTarget(row.url);
-        if (url.pathname !== '/' || origins.has(url.origin) || ids.has(row.id) || keyIds.has(row.keyId)) throw new Error();
+        if (url.pathname !== '/' || origins.has(url.origin) || ids.has(row.id) || keyIds.has(row.keyId)
+          || (row.directLogin === true && url.protocol !== 'https:')) throw new Error();
         origins.add(url.origin); ids.add(row.id); keyIds.add(row.keyId);
         if (row.enabled === false) return null;
         const keyFile = isAbsolute(row.privateKeyFile) ? row.privateKeyFile : resolve(dirname(path), row.privateKeyFile);
@@ -54,7 +58,7 @@ export function makeManagerAccess(path, parseTarget) {
         if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error();
         return { id: row.id, keyId: row.keyId, origin: url.origin, url: url.href,
           name: typeof row.name === 'string' ? row.name.slice(0, 60) : row.id,
-          role: typeof row.role === 'string' ? row.role.slice(0, 100) : '', privateKey };
+          role: typeof row.role === 'string' ? row.role.slice(0, 100) : '', directLogin: row.directLogin === true, privateKey };
       }).filter(Boolean);
       devices = next;
       previous = source;
@@ -66,11 +70,11 @@ export function makeManagerAccess(path, parseTarget) {
     onRevoke(listener) { listeners.add(listener); },
     configured() { refresh(); return configured; },
     devices() { refresh(); return devices; },
-    headers(device, session, method, target, origin) {
+    headers(device, session, method, target, origin, browserSession) {
       refresh();
       if (!devices.includes(device)) throw Object.assign(new Error('管理台信任已撤销'), { status: 403 });
       if (!sessionIds.has(session)) sessionIds.set(session, randomBytes(24).toString('base64url'));
-      return signRequest(device, sessionIds.get(session), method, target, origin);
+      return signRequest(device, sessionIds.get(session), method, target, origin, browserSession);
     },
     close() { clearInterval(timer); devices = []; revoke(); listeners.clear(); },
   };

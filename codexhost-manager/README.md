@@ -70,6 +70,23 @@ devices without per-device token entry. Existing legacy bindings are retained
 but unused. Removing a manifest from a running signed manager fails closed;
 returning to legacy mode requires an explicit configuration change and restart.
 
+### Direct Browser Sign-In
+
+On a device with the browser-login provider hooks, add `"directOrigin": "https://workstation.example.ts.net"`
+to its public trust JSON (no trailing slash), matching the device's existing manifest URL.
+Update the plugin on the device first, then set `"directLogin": true` on that device's manager
+manifest row. Both the manager and the device must use HTTPS. Existing keys are reused.
+
+The manager's device and task links submit a 30-second, single-use signed proof by POST
+to the device. The device sets its own secure browser session, and page, API and WebSocket
+traffic then stays on that device origin. The browser must be able to reach the device directly.
+Other devices and dashboard metadata keep their existing paths.
+
+Direct sessions last eight hours at most and are cleared on device logout, trust change or
+Web restart. Manager logout does not end a direct device session already issued. To roll back,
+remove `directLogin` from the manager row; remove `directOrigin` from the device trust to
+revoke already issued direct sessions while leaving signed proxy access configured.
+
 ## Security And Limitations
 
 - Every request and WebSocket handshake has a short-lived, replay-resistant
@@ -102,10 +119,12 @@ npm test
 node test-ui.mjs /absolute/path/playwright/index.mjs
 node test-packed-ui.mjs /absolute/path/playwright/index.mjs /absolute/path/web-server.mjs
 node test-packed-ui.mjs /absolute/path/playwright/index.mjs /absolute/path/web-server.mjs --manager-access
+node test-packed-ui.mjs /absolute/path/playwright/index.mjs /absolute/path/web-server.mjs --direct-login
 ```
 
 Browser tests require an existing Playwright installation and Chromium; optionally
 set `PLAYWRIGHT_CHANNEL` to an installed compatible browser. Packed tests require
 a compatible CodexHost Web build and its adjacent runtime resources. They use an
 isolated fixture Host and generated temporary credentials, not real conversations
-or model calls. Runtime test artifacts stay under ignored `tmp/`.
+or model calls. The direct-login test also needs OpenSSL for disposable TLS certificates.
+Runtime test artifacts stay under ignored `tmp/`.

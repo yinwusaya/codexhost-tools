@@ -1,13 +1,14 @@
 import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { createConnection, isIPv4 } from 'node:net';
+import { randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, join } from 'node:path';
 import { makeAuth } from './auth.mjs';
 import { makeProxy, browserBridge, deviceKey } from './proxy.mjs';
-import { makeManagerAccess } from './manager-access.mjs';
+import { browserLoginPath, makeManagerAccess } from './manager-access.mjs';
 
 function isPrivate(address) {
   if (!isIPv4(address)) return false;
@@ -172,6 +173,8 @@ export function makeServer({ vaultPath = fileURLToPath(new URL('.local/vault.jso
     const devices = managerAccess.devices();
     return { configured: true, authenticated: true, accessMode: 'manager',
       boundOrigins: [], boundDevices: devices.map(({ url, name, role }) => ({ url, name, role })),
+      directPaths: Object.fromEntries(devices.filter((device) => device.directLogin && publicOrigin)
+        .map((device) => [device.origin, `/api/direct-open/${device.id}`])),
       proxyPaths: Object.fromEntries(devices.map((device) => [device.origin, `/device/${deviceKey(device.origin)}/`])) };
   };
   const allowed = (req) => {
@@ -229,6 +232,24 @@ export function makeServer({ vaultPath = fileURLToPath(new URL('.local/vault.jso
     if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
       auth.logout(req, res);
       json(200, { authenticated: false });
+      return;
+    }
+    const directOpen = /^\/api\/direct-open\/([A-Za-z0-9_-]{1,96})$/.exec(url.pathname);
+    if (req.method === 'GET' && directOpen) {
+      const session = await auth.access(req);
+      const device = publicOrigin && req.headers.host === new URL(publicOrigin).host
+        && managerAccess.devices().find((row) => row.id === directOpen[1] && row.directLogin);
+      const thread = url.searchParams.get('session') || '';
+      if (!device || thread.length > 256) { res.writeHead(404).end('Direct sign-in is not enabled'); return; }
+      const headers = managerAccess.headers(device, session, 'POST', browserLoginPath, publicOrigin, thread);
+      const nonce = randomBytes(18).toString('base64url');
+      const action = device.origin + browserLoginPath;
+      // Cross-site form POSTs need the manager Origin, but never the handoff URL as a referrer.
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Security-Policy': `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action ${device.origin}; script-src 'nonce-${nonce}'`,
+        'Referrer-Policy': 'strict-origin',
+      }).end(`<!doctype html><meta charset="utf-8"><title>CodexHost</title><form method="post" action="${action}"><input type="hidden" name="proof" value="${headers['x-codexhost-manager-proof']}"><input type="hidden" name="signature" value="${headers['x-codexhost-manager-signature']}"><button type="submit">打开 CodexHost</button></form><script nonce="${nonce}">document.forms[0].submit()</script>`);
       return;
     }
     let bindings = [];

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadConfiguration, makeAuth } from './auth.mjs';
@@ -11,15 +12,45 @@ import { deviceKey } from './proxy.mjs';
 import { makeServer } from './server.mjs';
 import { testManagerToken } from './test-support.mjs';
 
-if (!process.argv[2] || !process.argv[3]) throw new Error('Usage: node test-packed-ui.mjs <playwright/index.mjs> <web-entry> [tsx-loader --source] [--manager-access]');
+if (!process.argv[2] || !process.argv[3]) throw new Error('Usage: node test-packed-ui.mjs <playwright/index.mjs> <web-entry> [tsx-loader --source] [--manager-access | --direct-login]');
 const { chromium } = await import(pathToFileURL(resolve(process.argv[2])).href);
 const entry = resolve(process.argv[3]);
-const signedAccess = process.argv.includes('--manager-access');
+const directLogin = process.argv.includes('--direct-login');
+const signedAccess = directLogin || process.argv.includes('--manager-access');
 const sourceEntry = process.argv.includes('--source');
 await mkdir(new URL('tmp/', import.meta.url), { recursive: true });
 const root = await mkdtemp(new URL('tmp/packed-ui-', import.meta.url));
 const upstreamToken = 'isolated-packed-ui-only-placeholder';
 let child, browser, manager, host;
+const tlsFronts = [];
+async function httpsFront(tls, hostname, target) {
+  const forward = (req) => httpRequest(target() + req.url, { method: req.method,
+    headers: { ...req.headers, 'x-forwarded-proto': 'https' } });
+  const server = createHttpsServer(tls, (req, res) => {
+    const upstream = forward(req);
+    upstream.on('response', (reply) => { res.writeHead(reply.statusCode, reply.headers); reply.pipe(res); });
+    upstream.on('error', () => res.destroy());
+    req.pipe(upstream);
+  });
+  server.on('upgrade', (req, socket, head) => {
+    const upstream = forward(req);
+    upstream.on('upgrade', (reply, peer, buffer) => {
+      socket.write('HTTP/1.1 101 Switching Protocols\r\n' + reply.rawHeaders.flatMap((item, i) => i % 2 ? [] : [`${item}: ${reply.rawHeaders[i + 1]}\r\n`]).join('') + '\r\n');
+      if (buffer.length) socket.write(buffer);
+      if (head.length) peer.write(head);
+      socket.pipe(peer).pipe(socket);
+      socket.on('close', () => peer.destroy());
+      peer.on('error', () => socket.destroy());
+    });
+    upstream.on('response', (reply) => { reply.resume(); socket.end(`HTTP/1.1 ${reply.statusCode} Rejected\r\n\r\n`); });
+    upstream.on('error', () => socket.destroy());
+    upstream.end();
+  });
+  tlsFronts.push(server);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  return `https://${hostname}:${server.address().port}`;
+}
 try {
   await mkdir(join(root, 'plugins'));
   const epoch = randomUUID(), hostToken = randomBytes(32).toString('hex');
@@ -56,16 +87,28 @@ try {
   const trustPath = join(root, 'public-trust.json');
   const keyPair = signedAccess ? generateKeyPairSync('ed25519') : undefined;
   let publicTrust;
+  let managerOrigin, deviceOrigin, deviceBackend;
+  if (directLogin) {
+    const key = join(root, 'test-tls.key'), cert = join(root, 'test-tls.crt');
+    const config = join(root, 'openssl.cnf');
+    await writeFile(config, '[req]\ndistinguished_name=dn\n[dn]\n');
+    const generated = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-keyout', key, '-out', cert,
+      '-days', '1', '-nodes', '-subj', '/CN=localhost', '-config', config], { stdio: 'ignore', cwd: root });
+    assert.equal(generated.status, 0, 'OpenSSL must generate fixture-only TLS material');
+    const tls = { key: await readFile(key), cert: await readFile(cert) };
+    managerOrigin = await httpsFront(tls, 'localhost', () => `http://127.0.0.1:${manager.address().port}`);
+    deviceOrigin = await httpsFront(tls, '127.0.0.1', () => deviceBackend);
+  }
   const seed = makeAuth(vaultPath, configPath);
   const config = await loadConfiguration(configPath);
   await writeFile(configPath, JSON.stringify({ ...config, token: testManagerToken }), { mode: 0o600 });
   if (signedAccess) {
     await writeFile(devicesPath, '[]', { mode: 0o600 });
-    manager = makeServer({ vaultPath, configPath, devicesPath });
+    manager = makeServer({ vaultPath, configPath, devicesPath, publicOrigin: managerOrigin });
     manager.listen(0, '127.0.0.1');
     await once(manager, 'listening');
-    publicTrust = { deviceId: 'isolated-device', managers: [{ keyId: 'isolated-key',
-      origin: `http://127.0.0.1:${manager.address().port}`, mountPath: `/device/${'0'.repeat(32)}`,
+    publicTrust = { deviceId: 'isolated-device', ...(directLogin ? { directOrigin: deviceOrigin } : {}), managers: [{ keyId: 'isolated-key',
+      origin: managerOrigin || `http://127.0.0.1:${manager.address().port}`, mountPath: `/device/${'0'.repeat(32)}`,
       publicKey: keyPair.publicKey.export({ type: 'spki', format: 'pem' }) }] };
     await writeFile(trustPath, JSON.stringify(publicTrust));
   }
@@ -76,6 +119,7 @@ try {
     '--ch-host-runtime', join(dirname(entry), 'host-runtime.mjs'),
     '--ch-launcher', join(root, 'disabled-launcher'), '--ch-plugins', join(root, 'plugins'),
     '--token', upstreamToken,
+    ...(directLogin ? ['--trusted-proxy', '127.0.0.1'] : []),
     ...(signedAccess ? ['--auth-provider', resolve(import.meta.dirname, 'plugins/manager-access.mjs'), '--auth-provider-config', trustPath] : [])], {
     cwd: root, env: { HOME: root, USERPROFILE: root, LOCALAPPDATA: root,
       XDG_CONFIG_HOME: join(root, 'config'), XDG_DATA_HOME: join(root, 'data'),
@@ -98,14 +142,16 @@ try {
       if (match) finish(null, new URL(match[1]).origin);
     });
   });
+  deviceBackend = upstream;
   let cookie;
   try {
     if (signedAccess) {
-      publicTrust.managers[0].mountPath = `/device/${deviceKey(upstream)}`;
+      publicTrust.managers[0].mountPath = `/device/${deviceKey(deviceOrigin || upstream)}`;
       await writeFile(trustPath, JSON.stringify(publicTrust));
       const privateKeyFile = join(root, 'generated-private.pem');
       await writeFile(privateKeyFile, keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
-      await writeFile(devicesPath, JSON.stringify([{ id: 'isolated-device', keyId: 'isolated-key', name: 'Isolated Device', url: upstream, privateKeyFile }]), { mode: 0o600 });
+      await writeFile(devicesPath, JSON.stringify([{ id: 'isolated-device', keyId: 'isolated-key', name: 'Isolated Device',
+        url: deviceOrigin || upstream, directLogin, privateKeyFile }]), { mode: 0o600 });
     } else {
       await seed.login(testManagerToken, { setHeader: (_, value) => { cookie = value.split(';')[0]; } });
       await seed.bind({ headers: { cookie } }, upstream, upstreamToken);
@@ -116,10 +162,10 @@ try {
     manager.listen(0, '127.0.0.1');
     await once(manager, 'listening');
   }
-  const base = `http://127.0.0.1:${manager.address().port}`;
+  const base = managerOrigin || `http://127.0.0.1:${manager.address().port}`;
   const mount = `/device/${deviceKey(upstream)}/`;
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined });
-  const context = await browser.newContext();
+  const context = await browser.newContext({ ignoreHTTPSErrors: directLogin });
   const page = await context.newPage();
   if (signedAccess) {
     await page.goto(base);
@@ -129,17 +175,43 @@ try {
     const card = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Isolated Device', exact: true }) });
     await card.waitFor();
     assert.equal(await page.locator('#connection').isVisible(), false);
-    assert.equal(await card.locator('.open').getAttribute('href'), mount);
+    assert.equal(await card.locator('.open').getAttribute('href'), directLogin ? '/api/direct-open/isolated-device' : mount);
     const popupPromise = context.waitForEvent('page');
     await card.locator('.open').click();
     const popup = await popupPromise;
-    await popup.waitForLoadState();
-    assert.equal(new URL(popup.url()).pathname, mount);
+    if (directLogin) await popup.waitForURL(deviceOrigin + '/');
+    else await popup.waitForLoadState();
+    assert.equal(new URL(popup.url()).pathname, directLogin ? '/' : mount);
     assert.equal(await popup.locator('#token').count(), 0);
+    if (directLogin) {
+      await popup.locator('#root button').first().waitFor();
+      assert.equal((await context.request.get(deviceOrigin + '/api/auth/status')).status(), 200);
+      const forbidden = await popup.evaluate(async () => {
+        const method = 'codexhost/accessTokenGet';
+        const reply = await fetch('/api/' + method, { method: 'POST', body: JSON.stringify({ method, payload: { args: {} } }) });
+        return (await reply.json()).result?.error?.code;
+      });
+      assert.equal(forbidden, 'auth/forbidden');
+      const unauthenticated = await browser.newContext({ ignoreHTTPSErrors: true });
+      assert.equal((await unauthenticated.request.get(deviceOrigin + '/api/auth/status')).status(), 401);
+      await unauthenticated.close();
+      const result = await popup.evaluate(async () => {
+        const socket = new WebSocket(location.origin.replace('https:', 'wss:') + '/api/remote.mux');
+        await new Promise((done, reject) => { socket.onopen = done; socket.onerror = reject; });
+        const closed = new Promise((done) => { socket.onclose = done; });
+        const logout = await fetch('/api/auth/logout', { method: 'POST' });
+        await closed;
+        return { logout: logout.status, after: (await fetch('/api/auth/status')).status };
+      });
+      assert.deepEqual(result, { logout: 200, after: 401 });
+      assert.equal((await context.request.get(base + '/api/auth/status')).status(), 200);
+      console.log('PASS: browser signs in on the device origin, opens the real Web UI and a direct WebSocket, then revokes the device session on logout.');
+    }
     await popup.close();
   } else {
     assert.equal((await context.request.post(base + '/api/auth/login', { data: { token: testManagerToken } })).status(), 200);
   }
+  if (!directLogin) {
   const errors = [], failedAssets = [];
   let scripts = 0;
   page.on('pageerror', (error) => errors.push(error.message));
@@ -189,8 +261,10 @@ try {
     assert.equal((await context.request.get(base + mount)).status(), 401);
   }
   console.log(`PASS: real ${sourceEntry ? 'source' : 'packed'} CodexHost Web shell, plugins, assets, ${signedAccess ? 'signed remote provider' : 'legacy proxy'} authentication and credential boundary; fake Host, models disabled.`);
+  }
 } finally {
   await browser?.close();
+  for (const front of tlsFronts) await new Promise((done) => { front.close(done); front.closeAllConnections(); });
   if (manager) await new Promise((done) => { manager.close(done); manager.closeAllConnections(); });
   if (child?.pid && child.exitCode === null && child.signalCode === null) {
     const exited = once(child, 'exit');
